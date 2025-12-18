@@ -32,46 +32,53 @@ describe("FileDB with MemFs", () => {
 
   test("should create a role", async () => {
     const roleData: RoleData = {
-      id: "role1",
       name: "Test Role",
       description: "A test role",
+      prompt: "This is a test role",
     };
 
-    await db.upsertRole(roleData);
-    const retrievedRole = await db.getRole("role1");
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe("0");
+    const retrievedRole = await db.getRole(id);
     expect(retrievedRole).toEqual(roleData);
   });
 
   test("should update an existing role", async () => {
     const roleData: RoleData = {
-      id: "role1",
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
 
-    await db.upsertRole(roleData);
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe("0");
 
     const updatedRole: RoleData = {
-      id: "role1",
+      id,
       name: "Updated Role",
       description: "Updated description",
+      prompt: "Updated prompt",
     };
 
     await db.upsertRole(updatedRole);
-    const retrievedRole = await db.getRole("role1");
+    const retrievedRole = await db.getRole(id);
     expect(retrievedRole).toEqual(updatedRole);
   });
 
-  test("should delete a role", async () => {
+  test("should soft delete a role", async () => {
     const roleData: RoleData = {
-      id: "role1",
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
 
-    await db.upsertRole(roleData);
-    const deleted = await db.deleteRole("role1");
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe("0");
+    const deleted = await db.deleteRole(id);
     expect(deleted).toBe(true);
 
-    const retrievedRole = await db.getRole("role1");
+    // Soft-deleted role should not be retrievable
+    const retrievedRole = await db.getRole(id);
     expect(retrievedRole).toBeNull();
   });
 
@@ -80,19 +87,85 @@ describe("FileDB with MemFs", () => {
     expect(deleted).toBe(false);
   });
 
+  test("should return false when deleting already deleted role", async () => {
+    const roleData: RoleData = {
+      name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
+    };
+
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe("0");
+    const deleted1 = await db.deleteRole(id);
+    expect(deleted1).toBe(true);
+
+    // Try to delete again
+    const deleted2 = await db.deleteRole(id);
+    expect(deleted2).toBe(false);
+  });
+
+  test("should not list soft-deleted roles", async () => {
+    const role1: RoleData = {
+      name: "Role 1",
+      description: "Description 1",
+      prompt: "This is a test role",
+    };
+    const role2: RoleData = {
+      name: "Role 2",
+      description: "Description 2",
+      prompt: "This is a test role",
+    };
+    const role3: RoleData = {
+      name: "Role 3",
+      description: "Description 3",
+      prompt: "This is a test role",
+    };
+
+    const id1 = await db.upsertRole(role1);
+    expect(id1).toBe("0");
+    const id2 = await db.upsertRole(role2);
+    expect(id2).toBe("1");
+    const id3 = await db.upsertRole(role3);
+    expect(id3).toBe("2");
+
+    // Delete role2
+    await db.deleteRole(id2);
+
+    const roles = await db.listRoles();
+    expect(roles).toHaveLength(2);
+    expect(roles).toContainEqual(role1);
+    expect(roles).toContainEqual(role3);
+    expect(roles).not.toContainEqual(expect.objectContaining({ id: id2 }));
+  });
+
   test("should return null when getting non-existent role", async () => {
     const role = await db.getRole("nonexistent");
     expect(role).toBeNull();
   });
 
   test("should list multiple roles", async () => {
-    const role1: RoleData = { id: "role1", name: "Role 1" };
-    const role2: RoleData = { id: "role2", name: "Role 2" };
-    const role3: RoleData = { id: "role3", name: "Role 3" };
+    const role1: RoleData = {
+      name: "Role 1",
+      description: "Description 1",
+      prompt: "This is a test role",
+    };
+    const role2: RoleData = {
+      name: "Role 2",
+      description: "Description 2",
+      prompt: "This is a test role",
+    };
+    const role3: RoleData = {
+      name: "Role 3",
+      description: "Description 3",
+      prompt: "This is a test role",
+    };
 
-    await db.upsertRole(role1);
-    await db.upsertRole(role2);
-    await db.upsertRole(role3);
+    const id1 = await db.upsertRole(role1);
+    expect(id1).toBe("0");
+    const id2 = await db.upsertRole(role2);
+    expect(id2).toBe("1");
+    const id3 = await db.upsertRole(role3);
+    expect(id3).toBe("2");
 
     const roles = await db.listRoles();
     expect(roles).toHaveLength(3);
@@ -104,28 +177,54 @@ describe("FileDB with MemFs", () => {
   test("should handle CRUD operations in sequence", async () => {
     // Create
     const roleData: RoleData = {
-      id: "role1",
       name: "Test Role",
+      description: "This is a test role",
+      prompt: "This is a test role",
     };
-    await db.upsertRole(roleData);
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe("0");
 
     // Read
-    let role = await db.getRole("role1");
+    let role = await db.getRole(id);
     expect(role).toEqual(roleData);
 
     // Update
     const updatedRole: RoleData = {
-      id: "role1",
+      id,
       name: "Updated Role",
+      description: "Updated description",
+      prompt: "Updated prompt",
     };
     await db.upsertRole(updatedRole);
-    role = await db.getRole("role1");
+    role = await db.getRole(id);
     expect(role).toEqual(updatedRole);
 
-    // Delete
-    const deleted = await db.deleteRole("role1");
+    // Soft Delete
+    const deleted = await db.deleteRole(id);
     expect(deleted).toBe(true);
-    role = await db.getRole("role1");
+    role = await db.getRole(id);
     expect(role).toBeNull();
+  });
+
+  test("should set createTime and deleteTime correctly", async () => {
+    const roleData: RoleData = {
+      name: "Test Role",
+      description: "A test role",
+      prompt: "This is a test role",
+      createTime: Date.now(),
+    };
+
+    const id = await db.upsertRole(roleData);
+    expect(id).toBe("0");
+    let role = await db.getRole(id);
+    expect(role?.createTime).toBeDefined();
+    expect(role?.deleteTime).toBeUndefined();
+
+    // Delete the role
+    await db.deleteRole(id);
+
+    // Get from DB directly to check deleteTime was set
+    const roles = await db.listRoles();
+    expect(roles).toHaveLength(0);
   });
 });
